@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF & Imagen → Markdown</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface-hover: #222632;
+            --border: #2a2e3b;
+            --border-active: #5b8def;
+            --text: #e1e4eb;
+            --text-muted: #8b90a0;
+            --accent: #5b8def;
+            --accent-hover: #7aa3f5;
+            --success: #4ade80;
+            --error: #f87171;
+            --warning: #fbbf24;
+            --tag-pdf: #3b82f6;
+            --tag-img: #a855f7;
+            --radius: 10px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+
+        .container { width: 100%; max-width: 640px; }
+
+        header { text-align: center; margin-bottom: 2.5rem; }
+
+        header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.4rem;
+        }
+
+        header h1 span { color: var(--accent); }
+
+        header p { color: var(--text-muted); font-size: 0.9rem; }
+
+        /* -- Drop zone -- */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: var(--accent);
+            background: rgba(91, 141, 239, 0.05);
+        }
+
+        .drop-zone input[type="file"] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer;
+        }
+
+        .drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+        .drop-zone .label { font-size: 0.95rem; font-weight: 500; }
+
+        .drop-zone .sublabel {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.35rem;
+        }
+
+        .formats {
+            display: flex;
+            gap: 0.4rem;
+            justify-content: center;
+            margin-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .formats .tag {
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            background: var(--surface);
+            color: var(--text-muted);
+        }
+
+        /* -- File list -- */
+        .file-list {
+            margin-top: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface);
+            padding: 0.6rem 0.85rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .file-item .type-tag {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            margin-right: 0.6rem;
+            flex-shrink: 0;
+        }
+
+        .file-item .type-tag.pdf { background: rgba(59,130,246,0.2); color: var(--tag-pdf); }
+        .file-item .type-tag.img { background: rgba(168,85,247,0.2); color: var(--tag-img); }
+
+        .file-item .name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            margin-right: 0.75rem;
+        }
+
+        .file-item .size {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            white-space: nowrap;
+            margin-right: 0.75rem;
+        }
+
+        .file-item .remove {
+            background: none; border: none;
+            color: var(--text-muted);
+            cursor: pointer; font-size: 1.1rem;
+            padding: 0 0.25rem; line-height: 1;
+            transition: color 0.15s;
+        }
+
+        .file-item .remove:hover { color: var(--error); }
+
+        /* -- Options -- */
+        .options {
+            margin-top: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .option {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .option input[type="checkbox"] {
+            appearance: none;
+            width: 18px; height: 18px;
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            background: var(--surface);
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .option input[type="checkbox"]:checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .option input[type="checkbox"]:checked::after {
+            content: '\2713';
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .desc {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            margin-left: 1.65rem;
+            margin-top: -0.3rem;
+        }
+
+        /* -- OCR lang select -- */
+        .lang-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-top: 0.25rem;
+        }
+
+        .lang-row label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .lang-row select {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.82rem;
+            padding: 0.35rem 0.6rem;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        /* -- Button -- */
+        .actions { margin-top: 1.75rem; }
+
+        .btn-convert {
+            width: 100%;
+            padding: 0.85rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+        }
+
+        .btn-convert:hover:not(:disabled) { background: var(--accent-hover); }
+        .btn-convert:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* -- Progress / status -- */
+        .status {
+            margin-top: 1.25rem;
+            text-align: center;
+            font-size: 0.85rem;
+            min-height: 1.5rem;
+        }
+
+        .status.processing { color: var(--warning); }
+        .status.success { color: var(--success); }
+        .status.error { color: var(--error); }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--surface);
+            border-radius: 2px;
+            margin-top: 0.75rem;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar.active { display: block; }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.3s ease;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+
+        @media (max-width: 480px) {
+            body { padding: 1.25rem 0.75rem; }
+            header h1 { font-size: 1.4rem; }
+            .drop-zone { padding: 2rem 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PDF & Imagen <span>→</span> Markdown</h1>
+            <p>Subí PDFs o imágenes con texto, convertí a Markdown, descargá el ZIP</p>
+        </header>
+
+        <div class="drop-zone" id="dropZone">
+            <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff,.tif,.bmp" multiple>
+            <div class="icon">📄</div>
+            <div class="label">Arrastrá archivos acá o hacé clic para seleccionar</div>
+            <div class="sublabel">Máx. 100 MB en total</div>
+            <div class="formats">
+                <span class="tag">PDF</span>
+                <span class="tag">JPG</span>
+                <span class="tag">PNG</span>
+                <span class="tag">WEBP</span>
+                <span class="tag">TIFF</span>
+                <span class="tag">BMP</span>
+            </div>
+        </div>
+
+        <div class="file-list" id="fileList"></div>
+
+        <div class="options">
+            <label class="option">
+                <input type="checkbox" id="optPages">
+                Marcadores de página (PDFs)
+            </label>
+            <div class="desc">Agrega comentarios &lt;!-- página N --&gt; en el Markdown</div>
+
+            <label class="option">
+                <input type="checkbox" id="optUnify">
+                Unificar en un solo archivo
+            </label>
+            <div class="desc">Genera un unificado.md además de los individuales</div>
+
+            <label class="option" id="optUnifiedOnlyWrapper" style="display:none">
+                <input type="checkbox" id="optUnifiedOnly">
+                Solo el archivo unificado en el ZIP
+            </label>
+
+            <div class="lang-row" id="langRow" style="display:none">
+                <label for="ocrLang">Idioma OCR:</label>
+                <select id="ocrLang">
+                    <option value="spa+eng">Español + Inglés</option>
+                    <option value="spa">Solo español</option>
+                    <option value="eng">Solo inglés</option>
+                    <option value="por+spa">Portugués + Español</option>
+                    <option value="fra+eng">Francés + Inglés</option>
+                    <option value="deu+eng">Alemán + Inglés</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn-convert" id="btnConvert" disabled>
+                Convertir y descargar ZIP
+            </button>
+        </div>
+
+        <div class="progress-bar" id="progressBar">
+            <div class="fill" id="progressFill"></div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <footer>
+            <p>PDFs con <a href="https://pypi.org/project/pymupdf4llm/" target="_blank" rel="noopener">pymupdf4llm</a> · Imágenes con <a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract OCR</a></p>
+        </footer>
+    </div>
+
+    <script>
+    (() => {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const btnConvert = document.getElementById('btnConvert');
+        const statusEl = document.getElementById('status');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const optUnify = document.getElementById('optUnify');
+        const optUnifiedOnlyWrapper = document.getElementById('optUnifiedOnlyWrapper');
+        const langRow = document.getElementById('langRow');
+
+        const VALID_EXT = new Set(['pdf','jpg','jpeg','png','webp','tiff','tif','bmp']);
+        let selectedFiles = [];
+
+        function getExt(name) {
+            return (name.split('.').pop() || '').toLowerCase();
+        }
+
+        function isImage(name) {
+            const ext = getExt(name);
+            return ['jpg','jpeg','png','webp','tiff','tif','bmp'].includes(ext);
+        }
+
+        // Show OCR lang selector when images are present
+        function updateLangVisibility() {
+            const hasImages = selectedFiles.some(f => isImage(f.name));
+            langRow.style.display = hasImages ? 'flex' : 'none';
+        }
+
+        optUnify.addEventListener('change', () => {
+            optUnifiedOnlyWrapper.style.display = optUnify.checked ? 'flex' : 'none';
+            if (!optUnify.checked) document.getElementById('optUnifiedOnly').checked = false;
+        });
+
+        ['dragenter','dragover'].forEach(evt => {
+            dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        });
+        ['dragleave','drop'].forEach(evt => {
+            dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+        });
+
+        dropZone.addEventListener('drop', e => {
+            const files = Array.from(e.dataTransfer.files).filter(f => VALID_EXT.has(getExt(f.name)));
+            addFiles(files);
+        });
+
+        fileInput.addEventListener('change', () => {
+            addFiles(Array.from(fileInput.files));
+            fileInput.value = '';
+        });
+
+        function addFiles(newFiles) {
+            const existing = new Set(selectedFiles.map(f => f.name + f.size));
+            for (const f of newFiles) {
+                if (!existing.has(f.name + f.size) && VALID_EXT.has(getExt(f.name))) {
+                    selectedFiles.push(f);
+                }
+            }
+            renderFileList();
+        }
+
+        function removeFile(idx) {
+            selectedFiles.splice(idx, 1);
+            renderFileList();
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = '';
+            selectedFiles.forEach((f, i) => {
+                const isPdf = getExt(f.name) === 'pdf';
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <span class="type-tag ${isPdf ? 'pdf' : 'img'}">${isPdf ? 'PDF' : 'IMG'}</span>
+                    <span class="name">${f.name}</span>
+                    <span class="size">${formatSize(f.size)}</span>
+                    <button class="remove" data-idx="${i}" title="Quitar">&times;</button>
+                `;
+                fileList.appendChild(div);
+            });
+
+            fileList.querySelectorAll('.remove').forEach(btn => {
+                btn.addEventListener('click', () => removeFile(parseInt(btn.dataset.idx)));
+            });
+
+            btnConvert.disabled = selectedFiles.length === 0;
+            setStatus('');
+            updateLangVisibility();
+        }
+
+        function setStatus(msg, type = '') {
+            statusEl.textContent = msg;
+            statusEl.className = 'status' + (type ? ' ' + type : '');
+        }
+
+        btnConvert.addEventListener('click', async () => {
+            if (!selectedFiles.length) return;
+
+            const formData = new FormData();
+            for (const f of selectedFiles) formData.append('files', f);
+            formData.append('page_markers', document.getElementById('optPages').checked);
+            formData.append('unify', optUnify.checked);
+            formData.append('unified_only', document.getElementById('optUnifiedOnly').checked);
+            formData.append('ocr_lang', document.getElementById('ocrLang').value);
+
+            btnConvert.disabled = true;
+            btnConvert.textContent = 'Convirtiendo...';
+            setStatus(`Procesando ${selectedFiles.length} archivo(s)...`, 'processing');
+            progressBar.classList.add('active');
+            progressFill.style.width = '70%';
+
+            try {
+                const resp = await fetch('/convert', { method: 'POST', body: formData });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.error || `Error ${resp.status}`);
+                }
+
+                const blob = await resp.blob();
+                const disposition = resp.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename="(.+?)"/);
+                const filename = match ? match[1] : 'markdown.zip';
+
+                // Stats from headers
+                const pdfCount = resp.headers.get('X-Converted-PDFs') || '0';
+                const imgCount = resp.headers.get('X-Converted-Images') || '0';
+                const failCount = resp.headers.get('X-Failed') || '0';
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                progressFill.style.width = '100%';
+                let msg = `✓ ${pdfCount} PDF(s), ${imgCount} imagen(es) convertida(s).`;
+                if (parseInt(failCount) > 0) msg += ` ${failCount} fallaron.`;
+                msg += ' Descargando ZIP...';
+                setStatus(msg, 'success');
+
+            } catch (err) {
+                setStatus(`✗ ${err.message}`, 'error');
+                progressFill.style.width = '0%';
+            } finally {
+                btnConvert.disabled = false;
+                btnConvert.textContent = 'Convertir y descargar ZIP';
+                setTimeout(() => {
+                    progressBar.classList.remove('active');
+                    progressFill.style.width = '0%';
+                }, 2500);
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
